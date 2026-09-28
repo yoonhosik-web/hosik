@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>유튜브 영상 만들기</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>유튜브 영상 만들기</h1>
+    <p class="sub">내 사진·동영상으로 영상, 썸네일, 제목·설명을 만듭니다. 파일은 서버로 올라가지 않고 이 브라우저 안에서만 처리됩니다.</p>
+  </header>
+
+  <nav id="tabs">
+    <button data-view="edit" class="active">1. 편집</button>
+    <button data-view="export">2. 영상 내보내기</button>
+    <button data-view="thumb">3. 썸네일</button>
+    <button data-view="meta">4. 제목·설명</button>
+  </nav>
+
+  <main>
+    <!-- 미리보기는 모든 탭 위에 공통으로 둔다 -->
+    <section id="stage">
+      <div class="canvas-wrap"><canvas id="preview"></canvas></div>
+      <div class="player">
+        <button id="play" class="primary" aria-label="재생">▶</button>
+        <input type="range" id="seek" min="0" max="1000" value="0" aria-label="위치">
+        <span id="clock" class="mono">0:00 / 0:00</span>
+      </div>
+    </section>
+
+    <section id="view-edit">
+      <div id="drop" class="drop" tabindex="0">
+        <p><strong>사진·동영상을 여기에 끌어다 놓거나</strong></p>
+        <label class="button primary">파일 선택<input type="file" id="files" accept="image/*,video/*" multiple hidden></label>
+        <p class="note">JPG·PNG·WebP·GIF, MP4·WebM·MOV 등 브라우저가 열 수 있는 형식. 아이폰 HEIC 사진은 브라우저에 따라 열리지 않을 수 있습니다.</p>
+      </div>
+
+      <div class="toolbar">
+        <button id="sort-date" class="ghost" title="파일 수정 시각 순">날짜순 정렬</button>
+        <button id="shuffle" class="ghost">섞기</button>
+        <button id="clear" class="ghost">모두 지우기</button>
+        <span id="summary" class="note"></span>
+      </div>
+      <ol id="clips" class="clips"></ol>
+
+      <details open>
+        <summary>영상 설정</summary>
+        <div class="grid">
+          <label>형식
+            <select id="format"></select>
+          </label>
+          <label>사진 1장 길이(초)
+            <input type="number" id="photo-dur" min="1" max="30" step="0.5" value="4">
+          </label>
+          <label>전환 효과
+            <select id="transition">
+              <option value="fade">부드럽게 겹치기</option>
+              <option value="black">검은 화면 거쳐 가기</option>
+              <option value="slide">밀어내기</option>
+              <option value="none">없음 (컷)</option>
+            </select>
+          </label>
+          <label>전환 시간(초)
+            <input type="number" id="trans-dur" min="0.2" max="2" step="0.1" value="0.8">
+          </label>
+          <label>화면 맞춤
+            <select id="fit">
+              <option value="blur">전체 보이기 + 흐린 배경</option>
+              <option value="cover">꽉 채우기 (가장자리 잘림)</option>
+              <option value="contain">전체 보이기 + 검은 여백</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="kenburns" checked> 사진 천천히 확대·이동 (켄 번즈)</label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>인트로·아웃트로</summary>
+        <div class="grid">
+          <label class="wide">인트로 제목 <input type="text" id="intro-title" placeholder="예: 제주도 3박 4일 여행" maxlength="60"></label>
+          <label class="wide">인트로 부제 <input type="text" id="intro-sub" placeholder="예: 2026년 9월" maxlength="80"></label>
+          <label>인트로 길이(초) <input type="number" id="intro-dur" min="1" max="10" step="0.5" value="3"></label>
+          <label class="wide">아웃트로 문구 <input type="text" id="outro-text" placeholder="예: 시청해 주셔서 감사합니다 · 구독과 좋아요" maxlength="80"></label>
+          <label>아웃트로 길이(초) <input type="number" id="outro-dur" min="1" max="10" step="0.5" value="3"></label>
+          <label>배경색 <input type="color" id="card-bg" value="#111111"></label>
+          <label>글자색 <input type="color" id="card-fg" value="#ffffff"></label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>자막 스타일</summary>
+        <div class="grid">
+          <label>위치
+            <select id="cap-pos">
+              <option value="bottom">아래</option>
+              <option value="middle">가운데</option>
+              <option value="top">위</option>
+            </select>
+          </label>
+          <label>크기
+            <select id="cap-size">
+              <option value="0.045">작게</option>
+              <option value="0.06" selected>보통</option>
+              <option value="0.08">크게</option>
+            </select>
+          </label>
+          <label>스타일
+            <select id="cap-style">
+              <option value="box">반투명 상자</option>
+              <option value="outline">테두리 글자</option>
+            </select>
+          </label>
+        </div>
+      </details>
+
+      <details open>
+        <summary>배경 음악</summary>
+        <div class="grid">
+          <label class="wide">음악 파일
+            <input type="file" id="bgm" accept="audio/*">
+          </label>
+          <label>음악 볼륨 <input type="range" id="bgm-vol" min="0" max="1" step="0.05" value="0.6"></label>
+          <label>동영상 원본 소리 <input type="range" id="clip-vol" min="0" max="1" step="0.05" value="1"></label>
+          <label class="check"><input type="checkbox" id="duck" checked> 동영상 재생 중 음악 줄이기</label>
+          <button id="bgm-clear" class="ghost">음악 빼기</button>
+        </div>
+        <p class="note">유튜브에 올릴 때는 저작권 문제가 없는 음악을 쓰세요. YouTube 스튜디오의 오디오 보관함에서 무료 음악을 받을 수 있습니다 (<a href="https://support.google.com/youtube/answer/3376882" target="_blank" rel="noopener">도움말</a>).</p>
+      </details>
+    </section>
+
+    <section id="view-export" hidden>
+      <p>편집한 영상을 파일로 만듭니다. <strong>실제 재생 속도로 녹화</strong>하므로 영상 길이만큼 시간이 걸립니다. 녹화 중에는 이 탭을 화면에 띄워 두세요 (다른 탭으로 가면 멈추거나 끊길 수 있습니다).</p>
+      <div class="toolbar">
+        <button id="export-start" class="primary">영상 만들기 시작</button>
+        <button id="export-cancel" hidden>취소</button>
+        <span id="export-info" class="note"></span>
+      </div>
+      <progress id="export-progress" max="1" value="0" hidden></progress>
+      <div id="export-result" hidden>
+        <video id="result-video" controls playsinline></video>
+        <p><a id="result-link" class="button primary" download>영상 파일 받기</a> <span id="result-size" class="note"></span></p>
+      </div>
+      <div class="note">
+        <p>· 결과 형식은 브라우저가 지원하면 MP4, 아니면 WebM입니다. 둘 다 유튜브에 바로 올릴 수 있습니다.</p>
+        <p>· 비트레이트는 유튜브 권장 인코딩 설정(1080p 30fps 8Mbps, 720p 5Mbps)에 맞췄습니다.</p>
+        <p>· 결과 영상은 화면을 다시 그린 것이라 원본 사진의 촬영 위치(GPS) 같은 EXIF 정보는 들어가지 않습니다.</p>
+      </div>
+    </section>
+
+    <section id="view-thumb" hidden>
+      <p>유튜브 권장 크기 1280×720 썸네일을 만듭니다. 위 미리보기에서 원하는 장면으로 이동한 뒤 <b>현재 장면 가져오기</b>를 누르세요.</p>
+      <div class="toolbar">
+        <button id="thumb-grab" class="primary">현재 장면 가져오기</button>
+        <label class="button">다른 사진 쓰기<input type="file" id="thumb-file" accept="image/*" hidden></label>
+      </div>
+      <div class="canvas-wrap thumb"><canvas id="thumb" width="1280" height="720"></canvas></div>
+      <div class="grid">
+        <label class="wide">큰 글자 <input type="text" id="thumb-text" placeholder="예: 제주 여행 VLOG" maxlength="40"></label>
+        <label class="wide">작은 글자 <input type="text" id="thumb-sub" placeholder="예: 3박 4일 코스 총정리" maxlength="60"></label>
+        <label>글자색 <input type="color" id="thumb-color" value="#ffffff"></label>
+        <label>강조색(테두리) <input type="color" id="thumb-stroke" value="#e53935"></label>
+        <label>위치
+          <select id="thumb-pos">
+            <option value="left">왼쪽 아래</option>
+            <option value="center">가운데</option>
+            <option value="right">오른쪽 위</option>
+          </select>
+        </label>
+        <label>배경 어둡게 <input type="range" id="thumb-dim" min="0" max="0.8" step="0.05" value="0.25"></label>
+      </div>
+      <p><button id="thumb-save" class="primary">썸네일 PNG 받기</button> <span id="thumb-size" class="note"></span></p>
+      <p class="note">유튜브 썸네일 권장: 1280×720(16:9), 2MB 이하, JPG·GIF·PNG. 2MB가 넘으면 자동으로 JPG로 저장합니다.</p>
+    </section>
+
+    <section id="view-meta" hidden>
+      <div class="grid one">
+        <label>제목 <span id="title-count" class="count"></span>
+          <input type="text" id="meta-title" placeholder="검색될 만한 핵심어를 앞쪽에">
+        </label>
+        <label>설명 <span id="desc-count" class="count"></span>
+          <textarea id="meta-desc" rows="5" placeholder="영상 소개, 촬영 장소·장비, 관련 링크 등"></textarea>
+        </label>
+        <label>챕터 (자막에서 자동 생성 — 편집 탭의 각 항목에서 '챕터로 쓰기'를 체크)
+          <textarea id="meta-chapters" rows="5" class="mono"></textarea>
+        </label>
+        <div><button id="chapter-reset" class="ghost">자막에서 다시 만들기</button></div>
+        <ul id="chapter-warn" class="warn"></ul>
+        <label>해시태그 (쉼표로 구분, 설명 끝에 붙음)
+          <input type="text" id="meta-hashtags" placeholder="예: 제주여행, 브이로그">
+        </label>
+        <label>태그 (쉼표로 구분) <span id="tags-count" class="count"></span>
+          <input type="text" id="meta-tags" placeholder="예: 제주도, 제주 여행, 여행 브이로그">
+        </label>
+      </div>
+      <ul id="meta-issues" class="warn"></ul>
+      <h3>완성된 설명</h3>
+      <textarea id="meta-out" rows="10" readonly class="mono"></textarea>
+      <div class="toolbar">
+        <button id="copy-title">제목 복사</button>
+        <button id="copy-desc" class="primary">설명 복사</button>
+        <button id="copy-tags">태그 복사</button>
+        <button id="meta-save">텍스트 파일로 저장</button>
+        <span id="copy-msg" class="note"></span>
+      </div>
+      <p class="note">제한값 출처: YouTube 고객센터 — 제목 100자, 설명 5,000자, 태그 합계 500자, 해시태그 60개 초과 시 모두 무시, 챕터는 0:00에서 시작·3개 이상·각 10초 이상, 쇼츠는 최대 3분.</p>
+    </section>
+  </main>
+
+  <footer class="note">모든 처리는 이 기기 안에서만 이뤄지며 사진·영상은 외부로 전송되지 않습니다.</footer>
+
+  <script src="js/timeline.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
