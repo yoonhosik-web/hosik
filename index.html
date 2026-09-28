@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>漢検 3級 공부</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>漢検 3級 공부</h1>
+    <p class="sub">일본 한자능력검정 3급 대비 · 3급 배당한자 284자 + 4급 복습 311자</p>
+  </header>
+
+  <nav id="tabs">
+    <button data-view="cards" class="active">한자 카드</button>
+    <button data-view="quiz">퀴즈</button>
+    <button data-view="review">오답 노트</button>
+    <button data-view="about">시험 안내</button>
+  </nav>
+
+  <main>
+    <section id="view-cards">
+      <div class="toolbar">
+        <label>범위
+          <select id="card-level">
+            <option value="3">3급 배당한자</option>
+            <option value="4">4급 (복습)</option>
+            <option value="all">전체</option>
+          </select>
+        </label>
+        <label><input type="checkbox" id="card-shuffle"> 섞기</label>
+        <input type="search" id="card-search" placeholder="한자·읽기 검색">
+      </div>
+      <div id="card" class="card" tabindex="0">
+        <div class="card-kanji" id="card-kanji"></div>
+        <div class="card-back" id="card-back" hidden></div>
+        <p class="hint" id="card-hint">카드를 눌러 뒷면 보기 (Space)</p>
+      </div>
+      <div class="card-nav">
+        <button id="card-prev">◀ 이전</button>
+        <span id="card-pos"></span>
+        <button id="card-next">다음 ▶</button>
+      </div>
+      <div class="card-nav">
+        <button id="card-wrong" class="ghost">모름 → 오답 노트에 추가</button>
+      </div>
+    </section>
+
+    <section id="view-quiz" hidden>
+      <div id="quiz-menu">
+        <div class="toolbar">
+          <label>범위
+            <select id="quiz-level">
+              <option value="3">3급 배당한자</option>
+              <option value="all">3급 + 4급</option>
+              <option value="4">4급 (복습)</option>
+            </select>
+          </label>
+          <label>문제 수
+            <select id="quiz-count">
+              <option>10</option><option selected>20</option><option>30</option>
+            </select>
+          </label>
+        </div>
+        <div class="grid" id="quiz-modes"></div>
+      </div>
+      <div id="quiz-play" hidden>
+        <div class="progress"><div id="quiz-bar"></div></div>
+        <p class="qmeta" id="quiz-meta"></p>
+        <div class="question" id="quiz-q"></div>
+        <p class="qsub" id="quiz-sub"></p>
+        <div class="choices" id="quiz-choices"></div>
+        <p class="explain" id="quiz-explain"></p>
+        <div class="card-nav">
+          <button id="quiz-quit" class="ghost">그만하기</button>
+          <button id="quiz-next" hidden>다음 ▶</button>
+        </div>
+      </div>
+      <div id="quiz-result" hidden>
+        <h2 id="result-score"></h2>
+        <p id="result-msg"></p>
+        <ul id="result-wrong"></ul>
+        <div class="card-nav">
+          <button id="result-back">메뉴로</button>
+          <button id="result-retry">같은 모드 다시</button>
+        </div>
+      </div>
+    </section>
+
+    <section id="view-review" hidden>
+      <p>퀴즈에서 틀리거나 카드에서 「모름」으로 표시한 한자입니다. 이 브라우저에만 저장됩니다.</p>
+      <div class="card-nav">
+        <button id="review-quiz">오답 한자로 읽기 퀴즈</button>
+        <button id="review-clear" class="ghost">오답 노트 비우기</button>
+      </div>
+      <div id="review-list" class="kgrid"></div>
+      <h3>모드별 기록</h3>
+      <table id="stats"></table>
+    </section>
+
+    <section id="view-about" hidden>
+      <h2>漢検 3級 개요</h2>
+      <ul>
+        <li><b>수준</b>: 중학교 졸업 정도</li>
+        <li><b>대상 한자</b>: 1,623자 (3급 배당한자 284자 + 4급 이하 1,339자)</li>
+        <li><b>검정 시간</b>: 60분</li>
+        <li><b>합격 기준</b>: 200점 만점 중 70% 정도 (약 140점)</li>
+        <li><b>주요 출제 분야</b>: 읽기, 동음·동훈이자, 한자 식별, 숙어의 구성, 부수, 대의어·유의어, 오쿠리가나, 사자성어, 오자 정정, 쓰기</li>
+      </ul>
+      <p class="note">위 내용은 일본한자능력검정협회가 공개한 기준에 따른 것이지만, 이 프로그램 제작 시 공식 사이트에 직접 접속해 재확인하지 못했습니다. 응시 전 반드시
+        <a href="https://www.kanken.or.jp/kanken/outline/degree/standard.html" target="_blank" rel="noopener">漢検 공식 사이트(級別の審査基準)</a>와
+        <a href="https://www.kanken.or.jp/kanken/outline/data/outline_degree_national_list20200217.pdf" target="_blank" rel="noopener">級別漢字表(PDF)</a>에서 최신 정보를 확인하세요.</p>
+      <p class="note">한자 데이터(읽기·부수·예시어)는 상용한자표(2010년 고시)와 漢検 부수 분류를 기준으로 작성했습니다. 오류를 발견하면 <code>js/data.js</code>를 수정하세요.</p>
+    </section>
+  </main>
+
+  <script src="js/data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
