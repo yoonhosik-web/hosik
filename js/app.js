@@ -379,6 +379,7 @@
 
   // ---------- 오답 노트 ----------
   function renderReview() {
+    $("review-msg").textContent = "";
     const list = $("review-list");
     const items = D.KANJI.filter((k) => wrongSet.has(k.kanji));
     list.innerHTML = items.length ? "" : "<p>아직 오답이 없습니다.</p>";
@@ -405,16 +406,29 @@
   }
   $("review-quiz").addEventListener("click", () => {
     const pool = D.KANJI.filter((k) => wrongSet.has(k.kanji));
-    if (!pool.length) return alert("오답 노트가 비어 있습니다.");
+    if (!pool.length) {
+      $("review-msg").textContent = "오답 노트가 비어 있습니다. 퀴즈를 풀거나 카드에서 「모름」을 눌러 추가하세요.";
+      return;
+    }
     show("quiz");
     startQuiz("reading", pool);
   });
+  // 두 번 눌러야 비워지도록 화면 안에서 확인
+  let clearArmed = false;
   $("review-clear").addEventListener("click", () => {
-    if (confirm("오답 노트를 비울까요?")) {
-      wrongSet = new Set();
-      saveWrong();
-      renderReview();
+    const btn = $("review-clear");
+    if (!clearArmed) {
+      clearArmed = true;
+      btn.textContent = "한 번 더 누르면 비워집니다";
+      setTimeout(() => { clearArmed = false; btn.textContent = "오답 노트 비우기"; }, 3000);
+      return;
     }
+    clearArmed = false;
+    btn.textContent = "오답 노트 비우기";
+    wrongSet = new Set();
+    saveWrong();
+    renderReview();
+    $("review-msg").textContent = "오답 노트를 비웠습니다.";
   });
 
   buildDeck();
