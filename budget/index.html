@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>가계부</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header>
+    <h1>가계부</h1>
+    <p class="sub">기록은 이 브라우저(localStorage)에만 저장되고 외부로 전송되지 않습니다. 가끔 <a href="#" data-goto="settings">백업</a>해 두세요.</p>
+  </header>
+
+  <div class="month-bar">
+    <button id="prev-month" class="ghost" aria-label="이전 달">◀</button>
+    <input type="month" id="month" aria-label="월 선택">
+    <button id="next-month" class="ghost" aria-label="다음 달">▶</button>
+    <button id="this-month" class="ghost">이번 달</button>
+  </div>
+
+  <section class="summary" aria-label="이번 달 요약">
+    <div><span class="label">수입</span><strong id="sum-income" class="mono income">0원</strong></div>
+    <div><span class="label">지출</span><strong id="sum-expense" class="mono expense">0원</strong></div>
+    <div><span class="label">잔액</span><strong id="sum-balance" class="mono">0원</strong></div>
+  </section>
+
+  <nav id="tabs">
+    <button data-view="list" class="active">내역</button>
+    <button data-view="stats">통계</button>
+    <button data-view="budget">예산</button>
+    <button data-view="settings">설정·백업</button>
+  </nav>
+
+  <main>
+    <!-- 내역 -->
+    <section id="view-list">
+      <form id="entry-form" class="card" autocomplete="off">
+        <div class="type-toggle" role="radiogroup" aria-label="구분">
+          <label><input type="radio" name="type" value="expense" checked><span>지출</span></label>
+          <label><input type="radio" name="type" value="income"><span>수입</span></label>
+        </div>
+        <div class="grid">
+          <label>날짜<input type="date" name="date" required></label>
+          <label>금액<input type="text" name="amount" inputmode="numeric" placeholder="예: 12000, 1.5만" required></label>
+          <label>분류<select name="category"></select></label>
+          <label>결제수단<select name="method"></select></label>
+          <label class="wide">메모<input type="text" name="memo" maxlength="200" placeholder="예: 점심 김밥"></label>
+        </div>
+        <p id="form-error" class="error" role="alert"></p>
+        <div class="actions">
+          <button type="submit" class="primary" id="save-btn">추가</button>
+          <button type="button" class="ghost" id="cancel-edit" hidden>수정 취소</button>
+        </div>
+      </form>
+
+      <div class="toolbar">
+        <select id="f-type" aria-label="구분 필터">
+          <option value="">전체</option><option value="expense">지출</option><option value="income">수입</option>
+        </select>
+        <select id="f-category" aria-label="분류 필터"><option value="">모든 분류</option></select>
+        <input type="search" id="f-query" placeholder="메모 검색" aria-label="메모 검색">
+        <span id="list-count" class="note"></span>
+      </div>
+      <div id="entries"></div>
+    </section>
+
+    <!-- 통계 -->
+    <section id="view-stats" hidden>
+      <div class="card">
+        <h3>분류별 지출</h3>
+        <div id="cat-chart" class="bars"></div>
+      </div>
+      <div class="card">
+        <h3>분류별 수입</h3>
+        <div id="cat-chart-income" class="bars"></div>
+      </div>
+      <div class="card">
+        <h3>일별 지출</h3>
+        <div id="daily-chart" class="chart"></div>
+        <p id="daily-note" class="note"></p>
+      </div>
+      <div class="card">
+        <h3>최근 6개월</h3>
+        <div id="monthly-chart" class="chart"></div>
+        <div class="table-wrap"><table class="table mono" id="monthly-table"></table></div>
+      </div>
+    </section>
+
+    <!-- 예산 -->
+    <section id="view-budget" hidden>
+      <div class="card">
+        <h3>예산 현황</h3>
+        <div id="budget-status"></div>
+      </div>
+      <div class="card">
+        <h3>월 예산 설정 <span class="note">(매달 같은 금액 적용, 0이나 빈칸이면 사용 안 함)</span></h3>
+        <form id="budget-form" class="budget-grid"></form>
+        <div class="actions"><button type="submit" form="budget-form" class="primary">예산 저장</button></div>
+      </div>
+    </section>
+
+    <!-- 설정 -->
+    <section id="view-settings" hidden>
+      <div class="card">
+        <h3>고정 수입·지출 <span class="note">(월세·통신비·급여 등. 해당 달을 열면 자동으로 추가)</span></h3>
+        <form id="rec-form" class="grid" autocomplete="off">
+          <label>구분<select name="type"><option value="expense">지출</option><option value="income">수입</option></select></label>
+          <label>매월<input type="number" name="day" min="1" max="31" value="1" required></label>
+          <label>금액<input type="text" name="amount" inputmode="numeric" required></label>
+          <label>분류<select name="category"></select></label>
+          <label>결제수단<select name="method"></select></label>
+          <label>메모<input type="text" name="memo" maxlength="200"></label>
+          <div class="actions wide"><button type="submit" class="primary">고정 항목 추가</button></div>
+        </form>
+        <p id="rec-error" class="error" role="alert"></p>
+        <ul id="rec-list" class="plain-list"></ul>
+      </div>
+
+      <div class="card">
+        <h3>분류 관리</h3>
+        <div class="cat-columns">
+          <div><h4>지출</h4><ul id="cat-expense" class="chips"></ul>
+            <form class="cat-add" data-type="expense"><input type="text" maxlength="20" placeholder="새 지출 분류" aria-label="새 지출 분류"><button>추가</button></form></div>
+          <div><h4>수입</h4><ul id="cat-income" class="chips"></ul>
+            <form class="cat-add" data-type="income"><input type="text" maxlength="20" placeholder="새 수입 분류" aria-label="새 수입 분류"><button>추가</button></form></div>
+        </div>
+        <p class="note">분류를 지워도 이미 기록한 내역의 분류 이름은 그대로 남습니다.</p>
+      </div>
+
+      <div class="card">
+        <h3>백업·내보내기</h3>
+        <div class="actions">
+          <button id="export-json">전체 백업 (JSON)</button>
+          <label class="button">백업 복원<input type="file" id="import-json" accept=".json,application/json" hidden></label>
+          <button id="export-csv">이번 달 CSV</button>
+          <button id="export-csv-all">전체 CSV</button>
+          <label class="button">CSV 가져오기<input type="file" id="import-csv" accept=".csv,text/csv" hidden></label>
+        </div>
+        <p class="note">CSV는 엑셀에서 바로 열 수 있습니다(UTF-8 BOM). 가져올 때 첫 줄에 <code>날짜,구분,분류,금액,결제수단,메모</code> 열 이름이 필요하며 <code>날짜</code>, <code>금액</code>만 있어도 됩니다. 구분이 없으면 음수는 지출, 양수는 수입으로 봅니다. 똑같은 내역은 중복으로 건너뜁니다.</p>
+        <p id="io-msg" class="note" role="status"></p>
+      </div>
+
+      <div class="card danger">
+        <h3>전체 삭제</h3>
+        <p class="note">이 브라우저에 저장된 모든 내역·예산·설정을 지웁니다. 되돌릴 수 없습니다.</p>
+        <button id="wipe" class="danger-btn">모두 지우기</button>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="js/ledger.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
