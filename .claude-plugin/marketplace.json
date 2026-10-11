@@ -1,0 +1,11 @@
+{
+  "name": "hosik",
+  "owner": { "name": "yoonhosik-web" },
+  "plugins": [
+    {
+      "name": "tool-status",
+      "source": "./plugins/tool-status",
+      "description": "상태 표시줄에 도구 호출 횟수와 마지막 도구를 보여줍니다"
+    }
+  ]
+}

@@ -80,3 +80,29 @@ tests/video-maker.test.js     로직 테스트
 - 아이폰 HEIC 사진은 크롬 등에서 열리지 않을 수 있습니다 (JPG로 변환하거나 사파리 사용).
 - 녹화 중 다른 탭으로 전환하면 브라우저가 화면 갱신을 멈춰 영상이 끊길 수 있습니다.
 - 브라우저를 닫으면 편집 중인 목록은 사라집니다 (원본 파일은 그대로).
+
+---
+
+# Claude Code 모드: 상태 표시줄 (`plugins/tool-status/`)
+
+Claude Code 상태 표시줄에 도구 호출 횟수, 마지막으로 쓴 도구, 실패 횟수를 보여줍니다.
+
+```
+🔧 12회 · 마지막: Bash · 실패 1
+```
+
+## 설치
+
+터미널의 Claude Code 프롬프트에서:
+
+```
+/plugin install tool-status --marketplace yoonhosik-web/hosik
+```
+
+`Add marketplace?`에 `y`, 설치 범위(scope)는 Enter로 user를 고르면 됩니다.
+
+- 횟수는 세션마다(그리고 모드가 다시 로드될 때) 0부터 셉니다.
+- 도구 이름과 실패 여부만 읽고, 외부로 아무것도 보내지 않습니다.
+- 모드 기능은 Claude Code의 얼리 액세스 기능이라 이후 버전에서 바뀔 수 있습니다.
+
+테스트 실행: `claude plugin test plugins/tool-status`
