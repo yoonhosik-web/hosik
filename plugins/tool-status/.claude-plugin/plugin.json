@@ -1,0 +1,6 @@
+{
+  "name": "tool-status",
+  "version": "0.1.0",
+  "description": "상태 표시줄에 도구 호출 횟수와 마지막 도구를 보여줍니다",
+  "author": { "name": "yoonhosik-web" }
+}
