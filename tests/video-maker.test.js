@@ -126,3 +126,45 @@ test("EXIF 촬영 시각 읽기", () => {
   assert.strictEqual(T.readExifDate(fakeJpeg("0000:00:00 00:00:00", true)), null);
   assert.strictEqual(T.readExifDate(new Uint8Array([1, 2, 3, 4]).buffer), null);
 });
+
+test("빠른 변환 코덱 선택: MP4 우선, 안 되면 WebM", () => {
+  const all = { "avc1.640028": true, "mp4a.40.2": true, "vp09.00.40.08": true, opus: true, vp8: true };
+  assert.strictEqual(T.pickEncoding(all, true).container, "mp4");
+  // 리눅스 크롬처럼 AAC 인코딩이 안 되면 WebM
+  assert.strictEqual(T.pickEncoding({ ...all, "mp4a.40.2": false }, true).video, "vp09.00.40.08");
+  // 소리가 없으면 AAC 지원 여부와 상관없이 MP4
+  assert.strictEqual(T.pickEncoding({ ...all, "mp4a.40.2": false }, false).container, "mp4");
+  assert.strictEqual(T.pickEncoding({ vp8: true, opus: true }, true).video, "vp8");
+  assert.strictEqual(T.pickEncoding({}, false), null);
+});
+
+test("동영상 소리 배치: 전환 구간에서 겹쳐 페이드, 음소거·소리 없는 클립 제외", () => {
+  const v = (name, extra) => ({ kind: "video", name, trimStart: 2, ...extra });
+  const segs = [
+    { type: "intro", duration: 3 },
+    { type: "clip", clip: v("a"), duration: 5 },
+    { type: "clip", clip: v("b", { mute: true }), duration: 5 },
+    { type: "clip", clip: v("c", { silent: true }), duration: 5 },
+    { type: "clip", clip: v("d"), duration: 5 },
+  ];
+  const tl = T.buildTimeline(segs, 1);
+  const plan = T.audioPlan(tl, { clipVol: 0.8, hasAudio: (c) => !c.silent });
+  assert.deepStrictEqual(plan.clips.map((c) => c.clip.name), ["a", "d"]);
+  assert.deepStrictEqual(plan.clips[0], { clip: segs[1].clip, when: 2, offset: 2, duration: 5, fadeIn: 1, fadeOut: 1, gain: 0.8 });
+  assert.strictEqual(plan.clips[1].fadeOut, 0); // 마지막 장면은 끝에서 줄이지 않음
+  assert.deepStrictEqual(plan.duckRanges, [[2, 7], [14, 19]]);
+  assert.strictEqual(T.audioPlan(tl, { duck: false }).duckRanges.length, 0);
+  assert.strictEqual(T.audioPlan(tl, { clipVol: 0 }).clips.length, 0);
+});
+
+test("배경 음악 볼륨 곡선", () => {
+  const near = (a, b) => assert.ok(Math.abs(a - b) < 1e-9, `${a} != ${b}`);
+  near(T.bgmGainAt(0, 30, 0.6, []), 0);          // 시작은 0
+  near(T.bgmGainAt(0.5, 30, 0.6, []), 0.3);      // 1초 페이드인
+  near(T.bgmGainAt(10, 30, 0.6, []), 0.6);
+  near(T.bgmGainAt(29, 30, 0.6, []), 0.3);       // 끝 2초 페이드아웃
+  near(T.bgmGainAt(30, 30, 0.6, []), 0);
+  near(T.bgmGainAt(12, 30, 1, [[10, 15]]), 0.25); // 동영상 소리 구간
+  near(T.bgmGainAt(9.85, 30, 1, [[10, 15]]), 1 - 0.75 * 0.5); // 0.3초에 걸쳐 줄어듦
+  near(T.bgmGainAt(16, 30, 1, [[10, 15]]), 1);
+});

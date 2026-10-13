@@ -208,6 +208,53 @@
     } catch (e) { return null; }
   }
 
+  // ---- 빠른 변환(WebCodecs) 내보내기용 ----
+
+  // 앞쪽이 우선. MP4(H.264+AAC)를 못 만들면 WebM(VP9/VP8+Opus)로. 둘 다 유튜브 업로드 가능
+  const ENCODINGS = [
+    { container: "mp4", video: "avc1.640028", muxVideo: "avc", audio: "mp4a.40.2", muxAudio: "aac" },
+    { container: "webm", video: "vp09.00.40.08", muxVideo: "V_VP9", audio: "opus", muxAudio: "A_OPUS" },
+    { container: "webm", video: "vp8", muxVideo: "V_VP8", audio: "opus", muxAudio: "A_OPUS" },
+  ];
+
+  // supported: { 코덱 문자열: true/false } → 쓸 수 있는 첫 조합 (소리가 없으면 영상 코덱만 본다)
+  function pickEncoding(supported, needAudio) {
+    return ENCODINGS.find((e) => supported[e.video] && (!needAudio || supported[e.audio])) || null;
+  }
+
+  // 동영상 클립의 소리를 어디에 어떻게 놓을지. 실시간 미리보기와 같은 규칙:
+  // 전환 구간에서 들어오는 장면은 커지고 나가는 장면은 작아진다.
+  function audioPlan(timeline, { clipVol = 1, duck = true, hasAudio = () => true } = {}) {
+    const items = timeline.items;
+    const T = timeline.transition;
+    const clips = [];
+    items.forEach((it, i) => {
+      if (it.type !== "clip" || !it.clip || it.clip.kind !== "video") return;
+      if (it.clip.mute || clipVol <= 0 || !hasAudio(it.clip)) return;
+      clips.push({
+        clip: it.clip,
+        when: it.start,
+        offset: it.clip.trimStart || 0,
+        duration: it.duration,
+        fadeIn: i > 0 ? T : 0,
+        fadeOut: i < items.length - 1 ? T : 0,
+        gain: clipVol,
+      });
+    });
+    const duckRanges = duck ? clips.map((c) => [c.when, c.when + c.duration]) : [];
+    return { clips, duckRanges };
+  }
+
+  // 배경 음악 볼륨: 앞 1초 페이드인, 끝 2초 페이드아웃, 동영상 소리가 날 때 25%로 (0.3초에 걸쳐 부드럽게)
+  function bgmGainAt(t, total, vol, duckRanges, duckLevel = 0.25, ramp = 0.3) {
+    const env = Math.max(0, Math.min(1, t / 1, (total - t) / 2));
+    let d = 0;
+    for (const [s, e] of duckRanges || []) {
+      d = Math.max(d, Math.min(1, Math.max(0, Math.min((t - (s - ramp)) / ramp, (e + ramp - t) / ramp))));
+    }
+    return vol * env * (1 - (1 - duckLevel) * d);
+  }
+
   function pickMimeType(isSupported) {
     const candidates = [
       "video/mp4;codecs=avc1.640028,mp4a.40.2",
@@ -221,7 +268,8 @@
   }
 
   const api = { FORMATS, LIMITS, effectiveTransition, buildTimeline, activeAt, kenBurns, fitRect,
-    formatTime, buildChapters, parseTags, tagsLength, buildDescription, validateMeta, wrapText, readExifDate, pickMimeType };
+    formatTime, buildChapters, parseTags, tagsLength, buildDescription, validateMeta, wrapText, readExifDate, pickMimeType,
+    ENCODINGS, pickEncoding, audioPlan, bgmGainAt };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.Timeline = api;
 })(typeof window !== "undefined" ? window : globalThis);

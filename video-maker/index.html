@@ -131,7 +131,14 @@
     </section>
 
     <section id="view-export" hidden>
-      <p>편집한 영상을 파일로 만듭니다. <strong>실제 재생 속도로 녹화</strong>하므로 영상 길이만큼 시간이 걸립니다. 녹화 중에는 이 탭을 화면에 띄워 두세요 (다른 탭으로 가면 멈추거나 끊길 수 있습니다).</p>
+      <p>편집한 영상을 파일로 만듭니다.</p>
+      <div class="modes">
+        <label class="mode"><input type="radio" name="export-mode" value="fast" checked>
+          <span><b>빠른 변환 (권장)</b><br><span class="note">한 장면씩 그려서 영상 파일로 만듭니다. 재생 속도에 맞춰 녹화하지 않으므로 컴퓨터 사양이 낮아도 끊기지 않습니다. 걸리는 시간은 컴퓨터 성능에 따라 다릅니다.</span></span></label>
+        <label class="mode"><input type="radio" name="export-mode" value="realtime">
+          <span><b>실시간 녹화</b><br><span class="note">미리보기를 재생하면서 녹화합니다. 영상 길이만큼 걸리고, 녹화 중에는 이 탭을 화면에 띄워 두어야 합니다. 사양이 낮으면 끊길 수 있습니다.</span></span></label>
+      </div>
+      <p id="fast-unsupported" class="note warn-text" hidden>이 브라우저는 빠른 변환(WebCodecs)을 지원하지 않아 실시간 녹화만 쓸 수 있습니다. 최신 크롬·엣지·파이어폭스에서는 빠른 변환을 쓸 수 있습니다.</p>
       <div class="toolbar">
         <button id="export-start" class="primary">영상 만들기 시작</button>
         <button id="export-cancel" hidden>취소</button>
@@ -210,6 +217,8 @@
 
   <footer class="note">모든 처리는 이 기기 안에서만 이뤄지며 사진·영상은 외부로 전송되지 않습니다.</footer>
 
+  <script src="lib/mp4-muxer.js"></script>
+  <script src="lib/webm-muxer.js"></script>
   <script src="js/timeline.js"></script>
   <script src="js/app.js"></script>
 </body>

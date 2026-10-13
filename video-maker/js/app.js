@@ -23,8 +23,10 @@
 
   const canvas = $("preview");
   const ctx = canvas.getContext("2d");
-  const small = document.createElement("canvas"); // 흐린 배경용 축소 캔버스
+  // 흐린 배경: 작은 캔버스에서 흐리게 한 뒤 중간 크기를 거쳐 두 번에 나눠 키운다 (한 번에 키우면 계단 무늬가 생김)
+  const small = document.createElement("canvas");
   const smallCtx = small.getContext("2d");
+  const mid = document.createElement("canvas");
 
   // ---------- 설정 ----------
   const SETTING_IDS = ["format", "photo-dur", "transition", "trans-dur", "fit", "kenburns", "intro-title", "intro-sub",
@@ -97,8 +99,10 @@
     state.timeline = T.buildTimeline(segs, s.transDur);
     const f = T.FORMATS[s.format];
     if (canvas.width !== f.w || canvas.height !== f.h) { canvas.width = f.w; canvas.height = f.h; }
-    small.width = Math.max(16, Math.round(f.w / 24));
-    small.height = Math.max(16, Math.round(f.h / 24));
+    small.width = Math.max(16, Math.round(f.w / 12));
+    small.height = Math.max(16, Math.round(f.h / 12));
+    mid.width = small.width * 3;
+    mid.height = small.height * 3;
     state.t = Math.min(state.t, state.timeline.total);
     updateSummary();
     updateMeta();
@@ -129,12 +133,37 @@
     return [c.src.width, c.src.height];
   }
 
-  function drawBlurBg(src, sw, sh, W, H) {
+  function makeBlurBg(src, sw, sh, target) {
     const r = T.fitRect(sw, sh, small.width, small.height, "cover");
-    smallCtx.drawImage(src, r.x, r.y, r.w, r.h);
+    const pad = small.width * 0.08; // 가장자리가 흐려지며 비지 않도록 조금 크게 그린다
+    smallCtx.clearRect(0, 0, small.width, small.height);
+    smallCtx.filter = "blur(" + (small.width / 40).toFixed(1) + "px)"; // 지원하지 않는 브라우저에서는 무시됨
+    smallCtx.drawImage(src, r.x - pad, r.y - pad, r.w + pad * 2, r.h + pad * 2);
+    smallCtx.filter = "none";
+    const tctx = target.getContext("2d");
+    tctx.imageSmoothingEnabled = true;
+    tctx.imageSmoothingQuality = "high";
+    tctx.drawImage(small, 0, 0, target.width, target.height);
+    return target;
+  }
+
+  function drawBlurBg(c, src, sw, sh, W, H) {
+    let bg;
+    if (c.kind === "image") {
+      // 사진은 바뀌지 않으므로 형식별로 한 번만 만들어 둔다
+      const key = mid.width + "x" + mid.height;
+      if (!c.blur || c.blur.key !== key) {
+        const cv = document.createElement("canvas");
+        cv.width = mid.width; cv.height = mid.height;
+        c.blur = { key, canvas: makeBlurBg(src, sw, sh, cv) };
+      }
+      bg = c.blur.canvas;
+    } else {
+      bg = makeBlurBg(src, sw, sh, mid);
+    }
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
-    ctx.drawImage(small, 0, 0, W, H);
+    ctx.drawImage(bg, 0, 0, W, H);
     ctx.fillStyle = "rgba(0,0,0,0.35)";
     ctx.fillRect(0, 0, W, H);
   }
@@ -146,7 +175,7 @@
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, W, H);
     if (!sw || !sh) return;
-    if (s.fit === "blur") drawBlurBg(src, sw, sh, W, H);
+    if (s.fit === "blur") drawBlurBg(c, src, sw, sh, W, H);
     const r = T.fitRect(sw, sh, W, H, s.fit === "cover" ? "cover" : "contain");
     if (c.kind === "image" && s.kenburns) {
       const k = T.kenBurns(item.index, Math.min(1, local / item.duration));
@@ -652,7 +681,7 @@
     try { await new Promise((ok, fail) => { el.onloadedmetadata = ok; el.onerror = fail; }); }
     catch (err) { alert("이 음악 파일을 열 수 없습니다."); return; }
     el.loop = true;
-    state.bgm = { el, duration: isFinite(el.duration) ? el.duration : 1e9 };
+    state.bgm = { el, file: f, duration: isFinite(el.duration) ? el.duration : 1e9 };
     if (audio.ctx) connectBgm();
   };
   function clearBgm() {
@@ -694,8 +723,24 @@
     });
   }
 
-  async function startExport() {
+  function showResult(blob, ext) {
+    const url = URL.createObjectURL(blob);
+    if ($("result-link").href) URL.revokeObjectURL($("result-link").href);
+    $("result-video").src = url;
+    $("result-link").href = url;
+    $("result-link").download = `${safeName($("intro-title").value || "my-video")}.${ext}`;
+    $("result-size").textContent = `${ext.toUpperCase()} · ${(blob.size / 1048576).toFixed(1)}MB · ${T.formatTime(state.timeline.total)}`;
+    $("export-result").hidden = false;
+    $("export-info").textContent = "완성! 파일을 받아 유튜브 스튜디오에서 업로드하세요.";
+  }
+
+  function startExport() {
     if (!state.clips.length || state.exporting) return;
+    const mode = document.querySelector("input[name=export-mode]:checked").value;
+    return mode === "fast" ? startFastExport() : startRealtimeExport();
+  }
+
+  async function startRealtimeExport() {
     if (!window.MediaRecorder || !canvas.captureStream) {
       alert("이 브라우저는 영상 녹화를 지원하지 않습니다. 최신 크롬·엣지·파이어폭스·사파리를 이용하세요.");
       return;
@@ -723,18 +768,9 @@
       setExportUi(false);
       if (!job || job.cancelled) { $("export-info").textContent = "취소했습니다."; return; }
       const type = rec.mimeType || mime || "video/webm";
-      const blob = new Blob(chunks, { type });
-      const ext = type.includes("mp4") ? "mp4" : "webm";
-      const url = URL.createObjectURL(blob);
-      if ($("result-link").href) URL.revokeObjectURL($("result-link").href);
-      $("result-video").src = url;
-      $("result-link").href = url;
-      $("result-link").download = `${safeName($("intro-title").value || "my-video")}.${ext}`;
-      $("result-size").textContent = `${ext.toUpperCase()} · ${(blob.size / 1048576).toFixed(1)}MB · ${T.formatTime(state.timeline.total)}`;
-      $("export-result").hidden = false;
-      $("export-info").textContent = "완성! 파일을 받아 유튜브 스튜디오에서 업로드하세요.";
+      showResult(new Blob(chunks, { type }), type.includes("mp4") ? "mp4" : "webm");
     };
-    state.exporting = { rec, cancelled: false };
+    state.exporting = { mode: "realtime", rec, cancelled: false };
     setExportUi(true);
     $("export-info").textContent = `녹화 중… (${fmt.w}×${fmt.h}, ${(mime || "기본 형식").split(";")[0]})`;
     rec.start(1000);
@@ -759,15 +795,211 @@
     if (on) $("export-result").hidden = true;
   }
 
+
+  // ---------- 빠른 변환: 한 장면씩 그려 WebCodecs로 인코딩 ----------
+  const FAST_OK = typeof VideoEncoder !== "undefined" && typeof VideoFrame !== "undefined";
+  const SR = 48000; // 내보내기 오디오 샘플레이트
+
+  // 다른 탭에 있어도 느려지지 않는 양보 (setTimeout은 숨은 탭에서 1초로 늦춰진다)
+  const yieldUi = () => new Promise((r) => { const ch = new MessageChannel(); ch.port1.onmessage = () => r(); ch.port2.postMessage(0); });
+
+  function seekExact(el, time) {
+    return new Promise((ok) => {
+      if (Math.abs(el.currentTime - time) < 0.001 && !el.seeking) return ok();
+      const done = () => { el.removeEventListener("seeked", done); clearTimeout(timer); ok(); };
+      const timer = setTimeout(done, 3000);
+      el.addEventListener("seeked", done);
+      el.currentTime = time;
+    });
+  }
+
+  async function decodeAudio(file) {
+    try {
+      const ctx = new OfflineAudioContext(2, 1, SR);
+      return await ctx.decodeAudioData(await file.arrayBuffer());
+    } catch (e) { return null; } // 소리 트랙이 없거나 브라우저가 못 읽는 형식
+  }
+
+  async function checkSupport(needAudio) {
+    const supported = {};
+    for (const e of T.ENCODINGS) {
+      if (!(e.video in supported)) {
+        try {
+          const r = await VideoEncoder.isConfigSupported({ codec: e.video, width: canvas.width, height: canvas.height, bitrate: 8e6, framerate: FPS });
+          supported[e.video] = !!r.supported;
+        } catch (err) { supported[e.video] = false; }
+      }
+      if (needAudio && !(e.audio in supported)) {
+        try {
+          const r = typeof AudioEncoder !== "undefined" && await AudioEncoder.isConfigSupported({ codec: e.audio, sampleRate: SR, numberOfChannels: 2, bitrate: 192000 });
+          supported[e.audio] = !!(r && r.supported);
+        } catch (err) { supported[e.audio] = false; }
+      }
+    }
+    return T.pickEncoding(supported, needAudio);
+  }
+
+  async function mixAudio(plan, total, s) {
+    const length = Math.ceil(total * SR);
+    const oc = new OfflineAudioContext(2, length, SR);
+    if (state.bgm && state.bgm.buffer) {
+      const src = oc.createBufferSource();
+      src.buffer = state.bgm.buffer;
+      src.loop = true;
+      const g = oc.createGain();
+      const curve = new Float32Array(Math.max(2, Math.ceil(total * 50) + 1)); // 1/50초 간격 볼륨 곡선
+      for (let i = 0; i < curve.length; i++) {
+        curve[i] = T.bgmGainAt((i / (curve.length - 1)) * total, total, s.bgmVol, plan.duckRanges);
+      }
+      g.gain.setValueCurveAtTime(curve, 0, total);
+      src.connect(g).connect(oc.destination);
+      src.start(0);
+    }
+    for (const c of plan.clips) {
+      const src = oc.createBufferSource();
+      src.buffer = c.clip.audioBuffer;
+      const g = oc.createGain();
+      const end = c.when + c.duration;
+      g.gain.setValueAtTime(c.fadeIn ? 0 : c.gain, c.when);
+      if (c.fadeIn) g.gain.linearRampToValueAtTime(c.gain, c.when + c.fadeIn);
+      if (c.fadeOut) { g.gain.setValueAtTime(c.gain, end - c.fadeOut); g.gain.linearRampToValueAtTime(0, end); }
+      src.connect(g).connect(oc.destination);
+      src.start(c.when, c.offset, c.duration);
+    }
+    return oc.startRendering();
+  }
+
+  async function encodeAudio(buffer, enc, muxer, job) {
+    const encoder = new AudioEncoder({
+      output: (chunk, meta) => muxer.addAudioChunk(chunk, meta),
+      error: (e) => { job.error = e; },
+    });
+    encoder.configure({ codec: enc.audio, sampleRate: SR, numberOfChannels: 2, bitrate: 192000 });
+    const L = buffer.getChannelData(0), R = buffer.getChannelData(1);
+    const STEP = SR / 10;
+    for (let pos = 0; pos < buffer.length && !job.cancelled; pos += STEP) {
+      const n = Math.min(STEP, buffer.length - pos);
+      const data = new Float32Array(n * 2);
+      data.set(L.subarray(pos, pos + n), 0);
+      data.set(R.subarray(pos, pos + n), n);
+      const ad = new AudioData({ format: "f32-planar", sampleRate: SR, numberOfFrames: n, numberOfChannels: 2, timestamp: Math.round((pos / SR) * 1e6), data });
+      encoder.encode(ad);
+      ad.close();
+    }
+    if (encoder.state !== "closed") { await encoder.flush(); encoder.close(); }
+  }
+
+  async function startFastExport() {
+    const s = settings();
+    const fmt = T.FORMATS[s.format];
+    const total = state.timeline.total;
+    const job = { mode: "fast", cancelled: false, error: null };
+    state.exporting = job;
+    pause();
+    setExportUi(true);
+    const info = (t) => ($("export-info").textContent = t);
+    try {
+      info("소리 준비 중…");
+      for (const c of state.clips) {
+        if (c.kind === "video" && c.audioBuffer === undefined) c.audioBuffer = await decodeAudio(c.file);
+      }
+      if (state.bgm && state.bgm.buffer === undefined) state.bgm.buffer = await decodeAudio(state.bgm.file);
+      const plan = T.audioPlan(state.timeline, { clipVol: s.clipVol, duck: s.duck, hasAudio: (c) => !!c.audioBuffer });
+      const hasMusic = !!(state.bgm && state.bgm.buffer && s.bgmVol > 0);
+      let needAudio = hasMusic || plan.clips.length > 0;
+
+      let enc = await checkSupport(needAudio);
+      if (!enc && needAudio) {
+        enc = await checkSupport(false);
+        if (enc) { needAudio = false; alert("이 브라우저는 소리 인코딩을 지원하지 않아 소리 없이 만듭니다. 소리가 필요하면 '실시간 녹화'를 쓰세요."); }
+      }
+      if (!enc) throw new Error("이 브라우저에서 쓸 수 있는 영상 코덱이 없습니다. '실시간 녹화'를 이용하세요.");
+
+      const Lib = enc.container === "mp4" ? window.Mp4Muxer : window.WebMMuxer;
+      const muxOpts = {
+        target: new Lib.ArrayBufferTarget(),
+        video: { codec: enc.muxVideo, width: fmt.w, height: fmt.h, frameRate: FPS },
+      };
+      if (needAudio) muxOpts.audio = { codec: enc.muxAudio, numberOfChannels: 2, sampleRate: SR };
+      if (enc.container === "mp4") muxOpts.fastStart = "in-memory";
+      const muxer = new Lib.Muxer(muxOpts);
+
+      const vEncoder = new VideoEncoder({
+        output: (chunk, meta) => muxer.addVideoChunk(chunk, meta),
+        error: (e) => { job.error = e; },
+      });
+      const vConfig = { codec: enc.video, width: fmt.w, height: fmt.h, bitrate: fmt.bitrate, framerate: FPS };
+      if (enc.muxVideo === "avc") vConfig.avc = { format: "avc" };
+      vEncoder.configure(vConfig);
+
+      const frames = Math.max(1, Math.round(total * FPS));
+      const started = performance.now();
+      for (let i = 0; i < frames; i++) {
+        if (job.cancelled || job.error) break;
+        const t = i / FPS;
+        // 이 순간에 보이는 동영상들을 정확한 위치로 옮긴 뒤 그린다
+        const seeks = [];
+        for (const a of T.activeAt(state.timeline, t)) {
+          const c = a.item.clip;
+          if (c && c.kind === "video") seeks.push(seekExact(c.el, c.trimStart + Math.min(a.local, a.item.duration)));
+        }
+        await Promise.all(seeks);
+        state.t = t;
+        render();
+        const frame = new VideoFrame(canvas, { timestamp: Math.round((i * 1e6) / FPS), duration: Math.round(1e6 / FPS) });
+        vEncoder.encode(frame, { keyFrame: i % (FPS * 2) === 0 });
+        frame.close();
+        while (vEncoder.encodeQueueSize > 4) await yieldUi();
+        if (i % 5 === 0) {
+          $("export-progress").value = (i / frames) * (needAudio ? 0.9 : 1);
+          const el = (performance.now() - started) / 1000;
+          const left = i > 10 ? Math.round((el / i) * (frames - i)) : null;
+          info(`영상 만드는 중… ${Math.round((i / frames) * 100)}%` + (left != null ? ` (약 ${T.formatTime(left)} 남음)` : ""));
+          await yieldUi();
+        }
+      }
+      if (vEncoder.state !== "closed") {
+        if (!job.cancelled && !job.error) await vEncoder.flush();
+        vEncoder.close();
+      }
+      if (job.error) throw job.error;
+
+      if (needAudio && !job.cancelled) {
+        info("소리 합치는 중…");
+        const mixed = await mixAudio(plan, total, s);
+        await encodeAudio(mixed, enc, muxer, job);
+        if (job.error) throw job.error;
+      }
+      if (job.cancelled) { info("취소했습니다."); return; }
+      muxer.finalize();
+      const type = enc.container === "mp4" ? "video/mp4" : "video/webm";
+      showResult(new Blob([muxOpts.target.buffer], { type }), enc.container);
+    } catch (e) {
+      console.error(e);
+      info("만들지 못했습니다: " + (e && e.message ? e.message : e));
+    } finally {
+      state.exporting = null;
+      setExportUi(false);
+      seek(0);
+    }
+  }
+
+  if (!FAST_OK) {
+    const fast = document.querySelector("input[name=export-mode][value=fast]");
+    fast.disabled = true;
+    document.querySelector("input[name=export-mode][value=realtime]").checked = true;
+    $("fast-unsupported").hidden = false;
+  }
+
   $("export-start").onclick = startExport;
   $("export-cancel").onclick = () => {
-    if (!state.exporting) return;
-    state.exporting.cancelled = true;
-    pause();
-    state.exporting.rec.stop();
+    const job = state.exporting;
+    if (!job) return;
+    job.cancelled = true;
+    if (job.mode === "realtime") { pause(); job.rec.stop(); }
   };
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden && state.exporting) $("export-info").textContent = "⚠ 탭이 가려져 있으면 녹화가 끊길 수 있습니다. 이 탭으로 돌아와 주세요.";
+    if (document.hidden && state.exporting && state.exporting.mode === "realtime") $("export-info").textContent = "⚠ 탭이 가려져 있으면 녹화가 끊길 수 있습니다. 이 탭으로 돌아와 주세요.";
   });
 
   function safeName(s) { return s.trim().replace(/[\\/:*?"<>|]+/g, "").replace(/\s+/g, "_").slice(0, 60) || "video"; }
